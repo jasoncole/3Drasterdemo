@@ -15,15 +15,12 @@ bring framerate down to <33ms/frame
 shading
 textures
 normal map
-spheres
-planes
 
 DEBUG
 add debug infrastructure
 
 GAME LOGIC
 entity system
-
 
 BUG LIST
 rotation still rolling, pitch working fine (still needs to be clamped)
@@ -425,7 +422,12 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
         Camera->Position = {0.0f, 0.0f, 5.0f};
         Camera->FocalDistance = 1.0f;
         Camera->Dimension = {1.0f, 1.0f};
+        
+        rotor3 ZRotation = AxisAngleToRotor({0, 1, 0}, Pi32*0.5f);
+        
         Camera->Rotation = EulerToRotor(0, 0, -Pi32*0.5f);
+        
+        Camera->Rotation = Camera->Rotation * ZRotation;
         
         // TODO(jason): WHY IS THE X AXIS UP??????????
         
@@ -569,11 +571,11 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
     
     // Camera Rotation
     v3 CameraPlanePos = Camera->Position; // defined as an offset from camera position
-    CameraPlanePos.z -= Camera->FocalDistance;
-    v3 OriginViewVector = CameraPlanePos - GameState->PlayerCamera.Position;
+    CameraPlanePos.z += Camera->FocalDistance;
+    v3 OriginViewVector = CameraPlanePos - Camera->Position;
     
     f32 MouseSens = Pi32*2.0f;
-    f32 Yaw = Input->MouseX*MouseSens;  // TODO(jason): translate to angles
+    f32 Yaw = Input->MouseX*MouseSens;  // TODO(jason): use angles instead of raw numbers
     f32 Pitch = Input->MouseY*MouseSens; 
     
     if ((Yaw != 0) && (Pitch != 0)) // if mouse moved then move camera
@@ -582,13 +584,18 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
         v3 XRotationAxis = Cross(RotateWithRotor(OriginViewVector, Camera->Rotation), UpVector);
         XRotationAxis = NormalizeV3(XRotationAxis);
         
-        rotor3 YRotation = AxisAngleToRotor(XRotationAxis, Pitch);
-        rotor3 XRotation = AxisAngleToRotor({0, 1, 0}, Yaw );
+        rotor3 XRotation = AxisAngleToRotor(RotateWithRotor(XRotationAxis, -Camera->Rotation), -Pitch);
+        // TODO(jason): clamp pitch
+        rotor3 foo = Camera-> Rotation * XRotation;
+        if (foo.z < foo.w && foo.z > -foo.w)
+        {
+            XRotation = {1, 0, 0, 0};
+        }
+        
+        rotor3 ZRotation = AxisAngleToRotor({0, 1, 0}, Yaw );
         
         
-        Camera->Rotation = Camera->Rotation * YRotation;
-        //Camera->Rotation = RotateRotor(Camera->Rotation, YRotation);
-        //Camera->Rotation = RotateRotor(Camera->Rotation, XRotation);
+        Camera->Rotation = Camera->Rotation * ZRotation * XRotation;
         
         // Pitch = z, Yaw = x
         // get yaw to y axis
