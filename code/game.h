@@ -123,11 +123,15 @@ inline v3
 NormalizeV3(v3 V)
 {
     f32 l_squared = LSquaredV3(V);
-    f32 l = sqrt(l_squared);
-    
-    return {V[0]/l,
-        V[1]/l,
-        V[2]/l};
+    if (l_squared > 0)
+    {
+        f32 l = sqrt(l_squared);
+        
+        return {V[0]/l,
+            V[1]/l,
+            V[2]/l};
+    }
+    else return {0, 0, 0};
 }
 
 struct matrix3
@@ -391,30 +395,30 @@ RotateWithRotor( v3 x, rotor3 p )
 	
 	q[0] = - p[1] * x[0] - p[2] * x[1] - p[3] * x[2];
     
-	// r = q P*
-	v3 r;
-	r[0] = q[0] * -p[1] + p[0] * q[1]  -  q[2] * p[3] + q[3] * p[2];
-	r[1] = q[0] * -p[2] + p[0] * q[2]  -  q[3] * p[1] + q[1] * p[3];
-	r[2] = q[0] * -p[3] + p[0] * q[3]  -  q[1] * p[2] + q[2] * p[1];
+    // r = q P*
+    v3 r;
+    r[0] = q[0] * -p[1] + p[0] * q[1]  -  q[2] * p[3] + q[3] * p[2];
+    r[1] = q[0] * -p[2] + p[0] * q[2]  -  q[3] * p[1] + q[1] * p[3];
+    r[2] = q[0] * -p[3] + p[0] * q[3]  -  q[1] * p[2] + q[2] * p[1];
     
     
-	/*// q = P V
-	v3 q;
-	q[0] = R[0] * V[0] + V[1] * R[1] + V[2] * R[2];
-	q[1] = R[0] * V[1] - V[0] * R[1] + V[2] * R[3];
-	q[2] = R[0] * V[2] - V[0] * R[2] - V[1] * R[3];
-    
-	f32 Trivector = V[0] * R[3] - V[1] * R[2] + V[2] * R[1]; // trivector
-    
-	// r = q P*
-	v3 Result;
-	Result[0] = R[0] * q[0] + q[1] * R[1] + q[2] * R[2]    + Trivector * R[3];
-	Result[1] = R[0] * q[1] - q[0] * R[1] - Trivector * R[2]    + q[2] * R[3];
+    /*// q = P V
+    v3 q;
+    q[0] = R[0] * V[0] + V[1] * R[1] + V[2] * R[2];
+    q[1] = R[0] * V[1] - V[0] * R[1] + V[2] * R[3];
+    q[2] = R[0] * V[2] - V[0] * R[2] - V[1] * R[3];
+        
+    f32 Trivector = V[0] * R[3] - V[1] * R[2] + V[2] * R[1]; // trivector
+        
+    // r = q P*
+    v3 Result;
+    Result[0] = R[0] * q[0] + q[1] * R[1] + q[2] * R[2]    + Trivector * R[3];
+    Result[1] = R[0] * q[1] - q[0] * R[1] - Trivector * R[2]    + q[2] * R[3];
             Result[2] = R[0] * q[2] + Trivector * R[1] - q[0] * R[2]    - q[1] * R[3];
-	
-	*/// trivector part of the result is always zero!
+        
+    */// trivector part of the result is always zero!
     
-	return r;
+    return r;
 }
 
 matrix3
@@ -489,12 +493,12 @@ MatrixToRotor( matrix3 a)
 inline rotor3 
 RotateRotor( rotor3 R, rotor3 Rotation )
 {
-	// should unwrap this for efficiency
-	return NormalizeRotor((Rotation) * R * (-Rotation));
+    // should unwrap this for efficiency
+    return NormalizeRotor((Rotation) * R * (-Rotation));
 }
 
 inline rotor3
-EulerToRotor(f32 y, f32 z, f32 x) // yaw (Z), pitch (Y), roll (X)
+EulerToRotor(f32 y, f32 z, f32 x)
 {
     f32 c1, c2, c3, s1, s2, s3, c1c2, s1s2;
     // calculate trig identities
@@ -510,8 +514,8 @@ EulerToRotor(f32 y, f32 z, f32 x) // yaw (Z), pitch (Y), roll (X)
     rotor3 R;
     R.w =c1c2*c3 - s1s2*s3;
     R.x =c1c2*s3 + s1s2*c3;
-	R.y =s1*c2*c3 + c1*s2*s3;
-	R.z =c1*s2*c3 - s1*c2*s3;
+    R.y =s1*c2*c3 + c1*s2*s3;
+    R.z =c1*s2*c3 - s1*c2*s3;
     return R;
 }
 
@@ -596,6 +600,7 @@ struct game_state
     v3 PlayerVelocity;
     v3 PlayerCameraOffset;
     game_camera PlayerCamera;
+    game_camera DebugCamera;
     matrix3* Triangles;
     int TriangleCount;
     matrix3* Walkables;

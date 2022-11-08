@@ -4,23 +4,14 @@
 
 /* TODO(jason):
 PLATFORM CODE
-load textures from disc
-- memory arena
-sound
-threading
-hardware accellerated graphics (OpenGL)
 bring framerate down to <33ms/frame
 
  "ENGINE" CODE
 shading
 textures
-normal map
 
 DEBUG
 add debug infrastructure
-
-GAME LOGIC
-entity system
 
 BUG LIST
 rotation still rolling, pitch working fine (still needs to be clamped)
@@ -35,7 +26,6 @@ clipping floating point error
 internal void
 DEBUGDrawRectangle(game_offscreen_buffer* Buffer, v2 ScreenCoords)
 {
-    u32* EndOfBuffer = (u32*)Buffer->Memory + Buffer->Pitch*Buffer->Height;
     int PixelX = (int)(ScreenCoords[0]*(f32)Buffer->Width + 0.5f);
     int PixelY = (int)(ScreenCoords[1]*(f32)Buffer->Height + 0.5f);
     
@@ -185,7 +175,7 @@ PoleTriangleIntersection(v3* Intersections, int* IntersectionSize, matrix3* Walk
 void
 RasterizeTriangle(matrix3 TrianglePos, matrix3 TriangleColor, game_camera* Camera, game_offscreen_buffer* Buffer, f32 NearClippingPlane)
 {
-    // NOTE(jason): RasterizeTrianglePos takes Camera Coordinates, NOT world coordinates
+    // NOTE(jason): RasterizeTriangle takes Camera Coordinates, NOT world coordinates
     // check clip plane
     u16 InsidePlane = ((TrianglePos[0][2] >= NearClippingPlane) |
                        ((TrianglePos[1][2] >= NearClippingPlane) << 1) |
@@ -199,9 +189,9 @@ RasterizeTriangle(matrix3 TrianglePos, matrix3 TriangleColor, game_camera* Camer
             v2 ScreenV1 = CameraSpaceToScreenCoords(TrianglePos[1], Camera->FocalDistance, Camera->Dimension);
             v2 ScreenV2 = CameraSpaceToScreenCoords(TrianglePos[2], Camera->FocalDistance, Camera->Dimension);
             
-            DEBUGDrawRectangle(Buffer, ScreenV0);
-            DEBUGDrawRectangle(Buffer, ScreenV1);
-            DEBUGDrawRectangle(Buffer, ScreenV2);
+            DEBUGDrawRectangle(Buffer, {ScreenV0[1], ScreenV0[0]});
+            DEBUGDrawRectangle(Buffer, {ScreenV1[1], ScreenV1[0]});
+            DEBUGDrawRectangle(Buffer, {ScreenV2[1], ScreenV2[0]});
             
             // BoundingRect
             f32 ScreenXCoords[3] = {ScreenV0.x, ScreenV1.x, ScreenV2.x};
@@ -228,29 +218,29 @@ RasterizeTriangle(matrix3 TrianglePos, matrix3 TriangleColor, game_camera* Camer
             // blend source color and destination color 
             
             //Min/Max is in NDC, convert to pixel coordinates
-            int PixelMinX = MinX*Buffer->Width + 0.5f;
-            int PixelMaxX = MaxX*Buffer->Width + 0.5f;
-            int PixelMinY = MinY*Buffer->Height + 0.5f;
-            int PixelMaxY = MaxY*Buffer->Height + 0.5f;
+            int PixelMinX = MinX*Buffer->Height + 0.5f;
+            int PixelMaxX = MaxX* Buffer->Height + 0.5f;
+            int PixelMinY = MinY*Buffer->Width + 0.5f;
+            int PixelMaxY = MaxY*Buffer->Width + 0.5f;
             
             u8* Row = ((u8*)Buffer->Memory +
-                       PixelMinX*Buffer->BytesPerPixel +
-                       PixelMinY*Buffer->Pitch);
+                       PixelMinY*Buffer->BytesPerPixel +
+                       PixelMinX*Buffer->Pitch);
             u8* ZRow = ((u8*)Buffer->ZBuffer +
-                        PixelMinX*Buffer->BytesPerPixel +
-                        PixelMinY*Buffer->Pitch);
-            for (int Y = PixelMinY;
-                 Y< PixelMaxY;
-                 ++Y)
+                        PixelMinY*Buffer->BytesPerPixel +
+                        PixelMinX*Buffer->Pitch);
+            for (int X = PixelMinX;
+                 X< PixelMaxX;
+                 ++X)
             {
                 u32*Pixel = (u32*)Row;
                 u32*ZPixel = (u32*)ZRow;
-                for (int X = PixelMinX;
-                     X< PixelMaxX;
-                     ++X)
+                for (int Y = PixelMinY;
+                     Y< PixelMaxY;
+                     ++Y)
                 {
-                    f32 NormX = (f32)X/(f32)Buffer->Width;
-                    f32 NormY = (f32)Y/(f32)Buffer->Height;
+                    f32 NormX = (f32)X/(f32)Buffer->Height;
+                    f32 NormY = (f32)Y/(f32)Buffer->Width;
                     v2 P = {NormX, NormY};
                     
                     f32 Lambda3 = Determinant(ScreenV0-P,ScreenV1-P); // these are parallelograms
@@ -382,8 +372,6 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
            (ArrayCount(Input->Controllers[0].Buttons)));
     Assert(sizeof(game_state) <= Memory->PermanentStorageSize);
     
-    // TODO(jason): switch to memory arena
-    
     game_state *GameState = (game_state *)Memory->PermanentStorage;
     GameState->Triangles = (matrix3*)(Buffer->ZBuffer + Buffer->BufferSize);
     GameState->TriangleCount = 2;
@@ -419,17 +407,13 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
         GameState->PlayerPosition = {1.0f, 0.0f, 0.0f}; // TODO(jason): snap to closest walkable geometry
         GameState->PlayerVelocity = {};
         GameState->PlayerCameraOffset = {0.0f, 0.0f, 5.0f};
-        Camera->Position = {0.0f, 0.0f, 5.0f};
+        Camera->Position = GameState->PlayerPosition + GameState->PlayerCameraOffset;
         Camera->FocalDistance = 1.0f;
         Camera->Dimension = {1.0f, 1.0f};
         
-        rotor3 ZRotation = AxisAngleToRotor({0, 1, 0}, Pi32*0.5f);
+        //rotor3 ZRotation = AxisAngleToRotor({0, 1, 0}, Pi32*0.5f);
         
-        Camera->Rotation = EulerToRotor(0, 0, -Pi32*0.5f);
-        
-        Camera->Rotation = Camera->Rotation * ZRotation;
-        
-        // TODO(jason): WHY IS THE X AXIS UP??????????
+        Camera->Rotation = EulerToRotor(Pi32*0.5f,0,0);
         
         matrix3 triangle0 = {};
         triangle0[0] = {-10.0f, -10.0f, 0.0f};
@@ -452,29 +436,31 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
     // Movement
     // for walkable geometry: (walkable geometry is defined as collidable geometry with a normal close to vertical)
     // cast poles from current player position
-    // legal moves are within LegHeight of current player position and have no other collidable geometry within HeadHeight above the pole intersection
+    // legal moves are within (+/-)LegHeight of current player position and have no other collidable geometry within HeadHeight above the pole intersection
+    // movement snaps to geometry
     // floodfill pathfinding algorithm
     
     // update PlayerVelocity
     game_controller_input Player1 = Input->Controllers[0];
     if (Player1.MoveLeft.EndedDown)
     {
-        GameState->PlayerVelocity.x -= 1.0f;
+        GameState->PlayerVelocity.y -= 1.0f;
     }
     if (Player1.MoveRight.EndedDown)
     {
-        GameState->PlayerVelocity.x += 1.0f;
+        GameState->PlayerVelocity.y += 1.0f;
     }
     if (Player1.MoveUp.EndedDown)
     {
-        GameState->PlayerVelocity.y += 1.0f;
+        GameState->PlayerVelocity.x -= 1.0f;
     }
     if (Player1.MoveDown.EndedDown)
     {
-        GameState->PlayerVelocity.y -= 1.0f;
+        GameState->PlayerVelocity.x += 1.0f;
     }
     
     f32 PlayerSpeed = 1.0f;
+    GameState->PlayerVelocity = RotateWithRotor(GameState->PlayerVelocity, Camera->Rotation);
     v3 NormVelocity = NormalizeV3(GameState->PlayerVelocity);
     GameState->PlayerVelocity = PlayerSpeed * NormVelocity;
     
@@ -482,9 +468,9 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
     {
         f32 MinStepSize = 0.5f;
         v3 UpVector = {0,0,-1.0f}; // global? also not an upvector
-        f32 LegHeight = 5.0f;
-        f32 PlayerHeight = 10.0f;
-        f32 tdest = NormVelocity * GameState->PlayerVelocity; // magnitude of PlayerVelocity
+        f32 LegHeight = 2.5f;
+        f32 PlayerHeight = 5.0f;
+        f32 tdest = PlayerSpeed;
         
 #define MAX_POLYGONS 2
         
@@ -572,6 +558,7 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
     // Camera Rotation
     v3 CameraPlanePos = Camera->Position; // defined as an offset from camera position
     CameraPlanePos.z += Camera->FocalDistance;
+    euler_angles test = RotorToEuler(Camera->Rotation);
     v3 OriginViewVector = CameraPlanePos - Camera->Position;
     
     f32 MouseSens = Pi32*2.0f;
@@ -581,21 +568,23 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
     if ((Yaw != 0) && (Pitch != 0)) // if mouse moved then move camera
     {
         v3 UpVector = {0, 0, 1.0f};
-        v3 XRotationAxis = Cross(RotateWithRotor(OriginViewVector, Camera->Rotation), UpVector);
-        XRotationAxis = NormalizeV3(XRotationAxis);
+        v3 ViewVector = RotateWithRotor(OriginViewVector, Camera->Rotation);
+        v3 YRotationAxis = Cross(ViewVector, UpVector);
+        YRotationAxis = NormalizeV3(YRotationAxis);
         
-        rotor3 XRotation = AxisAngleToRotor(RotateWithRotor(XRotationAxis, -Camera->Rotation), -Pitch);
+        
+        rotor3 YRotation = AxisAngleToRotor(YRotationAxis, -Pitch);
         // TODO(jason): clamp pitch
-        rotor3 foo = Camera-> Rotation * XRotation;
-        if (foo.z < foo.w && foo.z > -foo.w)
+        rotor3 CamPitch = YRotation * Camera-> Rotation;
+        if (Camera->Rotation.w * CamPitch.w < 0)
         {
-            XRotation = {1, 0, 0, 0};
+            CamPitch = Camera->Rotation;
         }
         
-        rotor3 ZRotation = AxisAngleToRotor({0, 1, 0}, Yaw );
         
+        rotor3 ZRotation = AxisAngleToRotor({0, 0, 1}, Yaw);
         
-        Camera->Rotation = Camera->Rotation * ZRotation * XRotation;
+        Camera->Rotation = ZRotation * CamPitch;
         
         // Pitch = z, Yaw = x
         // get yaw to y axis
