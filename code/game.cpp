@@ -2,25 +2,11 @@
 #include "game.h"
 #include <stdio.h>
 
-/* TODO(jason):
-PLATFORM CODE
-bring framerate down to <33ms/frame
-
- "ENGINE" CODE
-shading
-textures
-
-DEBUG
-add debug infrastructure
-
-BUG LIST
-rotation still rolling, pitch working fine (still needs to be clamped)
-movement does not rotate with camera
+/*
 clipping floating point error
 - added .01f to clipping plane, seems fine for now
  double edge fix for transparent surfaces
 - https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation/rasterization-stage
-
 */
 
 internal void
@@ -189,9 +175,9 @@ RasterizeTriangle(matrix3 TrianglePos, matrix3 TriangleColor, game_camera* Camer
             v2 ScreenV1 = CameraSpaceToScreenCoords(TrianglePos[1], Camera->FocalDistance, Camera->Dimension);
             v2 ScreenV2 = CameraSpaceToScreenCoords(TrianglePos[2], Camera->FocalDistance, Camera->Dimension);
             
-            DEBUGDrawRectangle(Buffer, {ScreenV0[1], ScreenV0[0]});
-            DEBUGDrawRectangle(Buffer, {ScreenV1[1], ScreenV1[0]});
-            DEBUGDrawRectangle(Buffer, {ScreenV2[1], ScreenV2[0]});
+            //DEBUGDrawRectangle(Buffer, {ScreenV0[1], ScreenV0[0]});
+            //DEBUGDrawRectangle(Buffer, {ScreenV1[1], ScreenV1[0]});
+            //DEBUGDrawRectangle(Buffer, {ScreenV2[1], ScreenV2[0]});
             
             // BoundingRect
             f32 ScreenXCoords[3] = {ScreenV0.x, ScreenV1.x, ScreenV2.x};
@@ -374,23 +360,14 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
     
     game_state *GameState = (game_state *)Memory->PermanentStorage;
     GameState->Triangles = (matrix3*)(Buffer->ZBuffer + Buffer->BufferSize);
-    GameState->TriangleCount = 2;
+    GameState->TriangleCount = 6;
     GameState->Walkables = (matrix3*)(GameState->Triangles + GameState->TriangleCount);
     GameState->WalkableCount = 2;
-    // TODO(jason): allocate space for walkables
     
     f32 NearClippingPlane = 1.0f;
     f32 FarClippingPlane = 1000000000.0f;
     game_camera* Camera = &GameState->PlayerCamera;
     
-    // clear Buffer to black
-    for (int BufferIndex = 0;
-         BufferIndex < (Buffer->BufferSize/Buffer->BytesPerPixel);
-         ++BufferIndex)
-    {
-        u32* Pixel = (u32*)Buffer->Memory + BufferIndex;
-        *Pixel = 0x00;
-    }
     
     // init Zbuffer to far clip plane
     for (int ZBufferIndex = 0;
@@ -409,6 +386,7 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
         GameState->PlayerCameraOffset = {0.0f, 0.0f, 5.0f};
         Camera->Position = GameState->PlayerPosition + GameState->PlayerCameraOffset;
         Camera->FocalDistance = 1.0f;
+        //Camera->Dimension = {1.0f, 0.5625f};
         Camera->Dimension = {1.0f, 1.0f};
         
         //rotor3 ZRotation = AxisAngleToRotor({0, 1, 0}, Pi32*0.5f);
@@ -425,8 +403,33 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
         triangle1[2] = {-10.0f, 10.0f, 0.0f};
         triangle1[1] = {10.0f, -10.0f, 0.0f};
         
+        matrix3 triangle2 = {};
+        triangle2[0] = {5.0f, 0.0f, 0.0f};
+        triangle2[2] = {0.0f, 5.0f, 0.0f};
+        triangle2[1] = {0.0f, 0.0f, 5.0f};
+        
+        matrix3 triangle3 = {};
+        triangle3[0] = {5.0f, 0.0f, 0.0f};
+        triangle3[1] = {0.0f, -5.0f, 0.0f};
+        triangle3[2] = {0.0f, 0.0f, 5.0f};
+        
+        matrix3 triangle4 = {};
+        triangle4[0] = {-5.0f, 0.0f, 0.0f};
+        triangle4[1] = {0.0f, 5.0f, 0.0f};
+        triangle4[2] = {0.0f, 0.0f, 5.0f};
+        
+        matrix3 triangle5 = {};
+        triangle5[0] = {-5.0f, 0.0f, 0.0f};
+        triangle5[2] = {0.0f, -5.0f, 0.0f};
+        triangle5[1] = {0.0f, 0.0f, 5.0f};
+        
         GameState->Triangles[0] = triangle0;
         GameState->Triangles[1] = triangle1;
+        GameState->Triangles[2] = triangle2;
+        GameState->Triangles[3] = triangle3;
+        GameState->Triangles[4] = triangle4;
+        GameState->Triangles[5] = triangle5;
+        
         GameState->Walkables[0] = triangle0;
         GameState->Walkables[1] = triangle1;
         
@@ -484,7 +487,7 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
              t < tdest;
              t += MinStepSize)
         {
-            v3 Intersections[MAX_POLYGONS] = {}; // TODO(jason): arenas
+            v3 Intersections[MAX_POLYGONS] = {}; // TODO(jason): memory
             int IntersectionSize = 0;
             v3 PolePos = GameState->PlayerPosition + t * NormVelocity;
             PolePos.z += PlayerHeight;
@@ -558,7 +561,6 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
     // Camera Rotation
     v3 CameraPlanePos = Camera->Position; // defined as an offset from camera position
     CameraPlanePos.z += Camera->FocalDistance;
-    euler_angles test = RotorToEuler(Camera->Rotation);
     v3 OriginViewVector = CameraPlanePos - Camera->Position;
     
     f32 MouseSens = Pi32*2.0f;
@@ -567,39 +569,68 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
     
     if ((Yaw != 0) && (Pitch != 0)) // if mouse moved then move camera
     {
-        v3 UpVector = {0, 0, 1.0f};
         v3 ViewVector = RotateWithRotor(OriginViewVector, Camera->Rotation);
-        v3 YRotationAxis = Cross(ViewVector, UpVector);
+        v3 YRotationAxis = Cross(ViewVector, {0, 0, 1});
         YRotationAxis = NormalizeV3(YRotationAxis);
         
-        
         rotor3 YRotation = AxisAngleToRotor(YRotationAxis, -Pitch);
-        // TODO(jason): clamp pitch
+        // TODO(jason): clamp pitch not working
         rotor3 CamPitch = YRotation * Camera-> Rotation;
         if (Camera->Rotation.w * CamPitch.w < 0)
         {
             CamPitch = Camera->Rotation;
         }
         
-        
         rotor3 ZRotation = AxisAngleToRotor({0, 0, 1}, Yaw);
         
-        Camera->Rotation = ZRotation * CamPitch;
-        
-        // Pitch = z, Yaw = x
-        // get yaw to y axis
-        // get pitch to x axis
-        //rotor3 Rotation = EulerToRotor(-Pitch, Yaw, 0);
-        rotor3 PitchRotor = EulerToRotor(Pitch, 0, 0);
-        rotor3 YawRotor = EulerToRotor(0, Yaw, 0);
+        Camera->Rotation = NormalizeRotor(ZRotation * CamPitch);
     }
     
-#if 1
+#if 0
     char TextBuffer[256];
     euler_angles CameraOrientation = RotorToEuler(Camera->Rotation);
     _snprintf_s(TextBuffer, sizeof(TextBuffer), "y:%f p:%f r:%f\n", CameraOrientation.yaw, CameraOrientation.pitch, CameraOrientation.roll);
     OutputDebugStringA(TextBuffer);
 #endif
+    
+    // color background based on pitch
+    u8* Row = (u8*)Buffer->Memory;
+    
+    for (int Y = 0;
+         Y < Buffer->Height;
+         ++Y)
+    {
+        u32* Pixel = (u32*)Row;
+        
+        f32 RelativePixelPitch = atan(-(Y/(f32)Buffer->Height*Camera->Height - Camera->Height/2.0f) / Camera->FocalDistance);
+        f32 AdjustedPitch = Pi32/2.0f - PitchFromRotor(Camera->Rotation) + RelativePixelPitch;
+        if (AdjustedPitch > Pi32/2.0f)
+        {
+            AdjustedPitch -= 2*(AdjustedPitch - Pi32/2.0f);
+        }
+        else if (AdjustedPitch < -Pi32/2.0f)
+        {
+            AdjustedPitch -= 2*(AdjustedPitch + Pi32/2.0f);
+        }
+        f32 PercentUp = (AdjustedPitch + Pi32/2.0f)/Pi32;
+        u32 Color = VecColorToHex({PercentUp, 1.0f-PercentUp, 0.0f});
+        
+#if 1
+        char TextBuffer[256];
+        //_snprintf_s(TextBuffer, sizeof(TextBuffer), "Camera Rotation:%f %f %f %f Camera Pitch: %f\n", Camera->Rotation.w, Camera->Rotation.x, Camera->Rotation.y, Camera->Rotation.z, PitchFromRotor(Camera->Rotation));
+        _snprintf_s(TextBuffer, sizeof(TextBuffer), "Camera Pitch: %f Adjusted Pitch:%f Percent Up:%f Color:%x\n", PitchFromRotor(Camera->Rotation), AdjustedPitch, PercentUp, Color);
+        OutputDebugStringA(TextBuffer);
+#endif
+        
+        for(int X = 0;
+            X < Buffer->Width;
+            ++X)
+        {
+            *Pixel++ = Color;
+        }
+        Row += Buffer->Pitch;
+    }
+    
     
     matrix3 Color = {};
     Color[0] = {1.0f, 0.0f, 0.0f};
@@ -618,5 +649,4 @@ GameUpdateAndRender(thread_context* Thread, game_memory* Memory,
         CameraTriangle[2] = RotateWithRotor(Triangle[2] - Camera->Position, -Camera->Rotation);
         RasterizeTriangle(CameraTriangle, Color, Camera, Buffer, NearClippingPlane);
     }
-    
 }

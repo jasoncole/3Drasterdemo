@@ -1,5 +1,3 @@
-/* date = July 26th 2021 7:49 pm */
-
 #ifndef GAME_H
 #define GAME_H
 
@@ -25,8 +23,6 @@
 #define Terabytes(Value) (Gigabytes(Value)*1024LL)
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
-
-// TODO(casey): swap, min, max ... macros?
 
 inline game_controller_input *GetController(game_input *Input, int unsigned ControllerIndex)
 {
@@ -329,60 +325,6 @@ AxisAngleToRotor(v3 axis, f32 theta)
     return R;
 }
 
-#if 0
-void Camera::SetViewByMouse(void) { 
-    // the coordinates of our mouse coordinates 
-    int MouseX, MouseY; 
-    // the middle of the screen in the x direction
-    int MiddleX = SCREENWIDTH/2; 
-    // the middle of the screen in the y direction
-    int MiddleY = SCREENHEIGHT/2; 
-    // vector that describes mouseposition - center
-    Vector MouseDirection(0, 0, 0); 
-    // static variable to store the rotation about the x-axis, since 
-    // we want to limit how far up or down we can look. 
-    // We don't need to cap the rotation about the y-axis as we 
-    // want to be able to turn around 360 degrees 
-    static double CurrentRotationAboutX = 0.0; 
-    // The maximum angle we can look up or down, in radians 
-    double maxAngle = 1; 
-    // This function gets the position of the mouse 
-    SDL_GetMouseState(&MouseX, &MouseY); 
-    // if the mouse hasn't moved, return without doing 
-    // anything to our view 
-    if((MouseX == MiddleX) && (MouseY == MiddleY)) return; 
-    // otherwise move the mouse back to the middle of the screen 
-    SDL_WarpMouse(MiddleX, MiddleY); 
-    // get the distance and direction the mouse moved in x (in 
-    // pixels). We can't use the actual number of pixels in radians, 
-    // as only six pixels would cause a full 360 degree rotation. 
-    // So we use a mousesensitivity variable that can be changed to 
-    // vary how many radians we want to turn in the x-direction for 
-    // a given mouse movement distance 
-    // We have to remember that positive rotation is counter-clockwise. 
-    // Moving the mouse down is a negative rotation about the x axis
-    // Moving the mouse right is a negative rotation about the y axis 
-    MouseDirection.x = (MiddleX - MouseX)/MouseSensitivity; 
-    MouseDirection.y = (MiddleY - MouseY)/MouseSensitivity; 
-    CurrentRotationX += MouseDirection.y; 
-    // We don't want to rotate up more than one radian, so we cap it. 
-    if(CurrentRotationX > 1) { CurrentRotationX = 1; return; } 
-    // We don't want to rotate down more than one radian, so we cap it. 
-    if(CurrentRotationX < -1) { CurrentRotationX = -1; return; } 
-    else { 
-        // get the axis to rotate around the x-axis. 
-        Vector Axis = CrossProduct(View - Position, Up); 
-        // To be able to use the quaternion conjugate, the axis to 
-        // rotate around must be normalized. 
-        Axis = Normalize(Axis); 
-        // Rotate around the y axis 
-        RotateCamera(MouseDirection.y, Axis.x, Axis.y, Axis.z);
-        // Rotate around the x axis 
-        RotateCamera(MouseDirection.x, 0, 1, 0); 
-    } 
-}
-#endif
-
 // non-optimized
 v3 
 RotateWithRotor( v3 x, rotor3 p )
@@ -400,23 +342,6 @@ RotateWithRotor( v3 x, rotor3 p )
     r[0] = q[0] * -p[1] + p[0] * q[1]  -  q[2] * p[3] + q[3] * p[2];
     r[1] = q[0] * -p[2] + p[0] * q[2]  -  q[3] * p[1] + q[1] * p[3];
     r[2] = q[0] * -p[3] + p[0] * q[3]  -  q[1] * p[2] + q[2] * p[1];
-    
-    
-    /*// q = P V
-    v3 q;
-    q[0] = R[0] * V[0] + V[1] * R[1] + V[2] * R[2];
-    q[1] = R[0] * V[1] - V[0] * R[1] + V[2] * R[3];
-    q[2] = R[0] * V[2] - V[0] * R[2] - V[1] * R[3];
-        
-    f32 Trivector = V[0] * R[3] - V[1] * R[2] + V[2] * R[1]; // trivector
-        
-    // r = q P*
-    v3 Result;
-    Result[0] = R[0] * q[0] + q[1] * R[1] + q[2] * R[2]    + Trivector * R[3];
-    Result[1] = R[0] * q[1] - q[0] * R[1] - Trivector * R[2]    + q[2] * R[3];
-            Result[2] = R[0] * q[2] + Trivector * R[1] - q[0] * R[2]    - q[1] * R[3];
-        
-    */// trivector part of the result is always zero!
     
     return r;
 }
@@ -519,22 +444,6 @@ EulerToRotor(f32 y, f32 z, f32 x)
     return R;
 }
 
-// try again later
-//inline rotor3
-//TaitBryanToRotor(f32 x, f32 z, rotor3 R)
-//{
-//
-//rotor3 X;
-//X.w = cos(x/2);
-//X.x = sin(x/2);
-//
-//rotor3 Z;
-//Z.w = cos(z/2);
-//Z.x = sin(z/2)*cos();
-//Z.y = sin(z/2)*cos(x);
-//Z.z = sin(z/2)*cos(x);
-//}
-//
 
 #if 1
 struct euler_angles
@@ -571,13 +480,15 @@ RotorToEuler(rotor3 R) //YZX
 { 
     return MatrixToEuler(RotorToMatrix(R));
 }
-#endif
 
-struct sphere
+internal f32
+PitchFromRotor(rotor3 q)
 {
-    v3 Position;
-    f32 Radius;
-};
+    //return 2*atan2(sqrtf(1+2*(q.w*q.y-q.x*q.z)), sqrtf(1-2*(q.w*q.y-q.x*q.z))) - Pi32/2.0f;
+    euler_angles e_angles= RotorToEuler(q);
+    return e_angles.pitch;
+}
+#endif
 
 struct game_camera
 {
